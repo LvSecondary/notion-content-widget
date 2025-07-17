@@ -1,0 +1,217 @@
+<!-- index.html - Versión 2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Content Search Widget</title>
+  <style>
+    :root {
+      --bg-color: #2f3136;
+      --text-color: #f5f5f5;
+      --accent: #4caf50;
+      --error: #f44336;
+      --card-bg: #404249;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 700px;
+      width: 100%;
+      background: var(--card-bg);
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    h2 {
+      margin: 5px 0 20px;
+      font-size: 18px;
+      color: #aaa;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      margin-bottom: 15px;
+      border: none;
+      border-radius: 5px;
+    }
+    button {
+      padding: 10px 16px;
+      font-size: 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-right: 10px;
+      background-color: var(--accent);
+      color: white;
+    }
+    .button-red {
+      background-color: var(--error);
+    }
+    .response, .results, .images, .confirmation, .omdb-options {
+      margin-top: 20px;
+    }
+    .img-thumb {
+      max-width: 100%;
+      max-height: 180px;
+      margin: 8px 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      transition: border 0.3s;
+    }
+    .img-thumb:hover {
+      border: 2px solid var(--accent);
+    }
+    .notice {
+      margin-top: 10px;
+      color: var(--accent);
+    }
+    .omdb-entry {
+      background: #333;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .omdb-entry:hover {
+      background: #3e3e3e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Content Search Widget</h1>
+    <h2>By SatanLv</h2>
+    <input id="searchInput" type="text" placeholder="Search movie, anime, series...">
+    <button onclick="startSearch()">Search on the Web</button>
+
+    <div class="response" id="suggestionContainer"></div>
+    <div class="confirmation" id="confirmationButtons"></div>
+    <div class="results" id="omdbOptions"></div>
+    <div class="images" id="imageResults"></div>
+    <div class="notice" id="copyNotice"></div>
+    <h2 style="margin-top: 40px;">v2.0</h2>
+  </div>
+
+  <script>
+    const GOOGLE_API = "AIzaSyCIOzztenhY4A_knS4Rqa1E31dpAz_qUNw";
+    const GOOGLE_CX = "755902b769ce14965";
+    const OMDB_API = "aacdb68f";
+
+    let currentQuery = "";
+    let acceptedTitle = "";
+
+    async function startSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+      currentQuery = query;
+      const suggestionContainer = document.getElementById('suggestionContainer');
+      suggestionContainer.innerHTML = "Searching...";
+      const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=what movie in english am i referring to when i write: ${encodeURIComponent(query)}&excludeTerms=reddit,quora,facebook,instagram,x,4chan`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const item = data.items?.find(i => i.title && (i.link.includes("wikipedia.org") || i.link.includes("imdb.com")));
+      if (!item) {
+        suggestionContainer.innerHTML = "<span style='color:red'>Content not found, try searching for the title manually...</span>";
+        return;
+      }
+
+      const cleanedTitle = item.title.replace(/ -.*|\\(.*?\\)|\\[.*?\\]/g, "").trim();
+      acceptedTitle = cleanedTitle;
+      suggestionContainer.innerHTML = `Are you searching for: <b>${cleanedTitle}</b>?`;
+
+      document.getElementById('confirmationButtons').innerHTML = `
+        <button onclick="handleYes()">Yes</button>
+        <button class="button-red" onclick="handleNo()">No</button>
+      `;
+    }
+
+    function handleNo() {
+      document.getElementById('suggestionContainer').innerHTML = "<span style='color:red'>Content not found, try searching for the title manually...</span>";
+      document.getElementById('confirmationButtons').innerHTML = "";
+    }
+
+    async function handleYes() {
+      document.getElementById('confirmationButtons').innerHTML = "";
+      document.getElementById('suggestionContainer').innerHTML = "<b>Which content are you referring to?</b>";
+      const url = `https://www.omdbapi.com/?apikey=${OMDB_API}&s=${encodeURIComponent(acceptedTitle)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const container = document.getElementById('omdbOptions');
+      container.innerHTML = "";
+
+      if (!data.Search) {
+        container.innerHTML = "<span style='color:red'>No matching entries found.</span>";
+        return;
+      }
+
+      for (let item of data.Search) {
+        const detail = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API}&i=${item.imdbID}&plot=full`);
+        const detailData = await detail.json();
+        const entry = document.createElement("div");
+        entry.className = "omdb-entry";
+        entry.innerHTML = `<strong>${detailData.Title}</strong><br><em>Sinopsis:</em> ${detailData.Plot || "N/A"}`;
+        entry.onclick = () => copyOmdbInfo(detailData);
+        container.appendChild(entry);
+      }
+
+      fetchImages(currentQuery);
+    }
+
+    async function fetchImages(query) {
+      const imgContainer = document.getElementById('imageResults');
+      imgContainer.innerHTML = "";
+      const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&searchType=image&q=${encodeURIComponent(query)}&imgSize=xxlarge&num=10`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const images = data.items?.filter(img => img.image && img.image.height < img.image.width).slice(0, 5);
+
+      if (images?.length) {
+        images.forEach(img => {
+          const el = document.createElement("img");
+          el.src = img.link;
+          el.className = "img-thumb";
+          el.onclick = () => {
+            navigator.clipboard.writeText(img.link);
+            showNotice("Image link copied to clipboard!");
+          };
+          imgContainer.appendChild(el);
+        });
+        navigator.clipboard.writeText(images[0].link);
+      } else {
+        imgContainer.innerHTML = "<span style='color:red'>No valid images found.</span>";
+      }
+    }
+
+    function copyOmdbInfo(data) {
+      const text = `📽️ **${data.Title}**\n${data.Runtime || "?"}, ${data.Genre || "?"}\n\n🎬 **SINOPSIS**\n${data.Plot || "N/A"}\n\n🎞️ **INFO**\n${data.Director}, ${data.Actors}, ${data.Production || "?"}\n\n🏆 **PREMIOS**\n${data.Awards || "N/A"}\n\n⭐ **RATING**\nIMDB: ${data.imdbRating || "?"}, Rotten Tomatoes: ${(data.Ratings.find(r => r.Source === "Rotten Tomatoes") || {}).Value || "?"}`;
+      navigator.clipboard.writeText(text);
+      showNotice("🎉 Content info successfully copied to clipboard!");
+    }
+
+    function showNotice(text) {
+      document.getElementById("copyNotice").innerText = text;
+    }
+
+    document.getElementById("searchInput").addEventListener("keypress", function(e) {
+      if (e.key === "Enter") startSearch();
+    });
+  </script>
+</body>
+</html>
