@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Content Search Widget</title>
+  <style>
+    :root {
+      --bg-color: #2f3437;
+      --widget-bg: #373c3f;
+      --text-color: #ffffff;
+      --accent-color: #4caf50;
+      --error-color: #e53935;
+      --border-radius: 0.75rem;
+      --transition: all 0.3s ease-in-out;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .widget {
+      background: var(--widget-bg);
+      border-radius: var(--border-radius);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      padding: 2rem;
+      max-width: 700px;
+      width: 100%;
+      transition: var(--transition);
+    }
+
+    h1, h2 {
+      text-align: center;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+    }
+
+    h2 {
+      font-size: 1rem;
+      color: #aaa;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #555;
+      border-radius: var(--border-radius);
+      font-size: 1rem;
+      background-color: #444;
+      color: white;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      background-color: var(--accent-color);
+      color: white;
+      border-radius: var(--border-radius);
+      font-size: 1rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    button:hover {
+      background-color: #388e3c;
+    }
+
+    .result-title {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .confirmation-buttons {
+      display: flex;
+      justify-content: space-around;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .confirmation-buttons button {
+      flex: 1;
+      font-weight: bold;
+    }
+
+    .yes {
+      background-color: #4caf50;
+    }
+
+    .no {
+      background-color: #e53935;
+    }
+
+    .images-grid {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+
+    .images-grid img {
+      flex: 1;
+      max-width: 19%;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: 0.2s;
+      border: 2px solid transparent;
+    }
+
+    .images-grid img:hover {
+      border-color: var(--accent-color);
+    }
+
+    .copied-bubble {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      background-color: #4caf50;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: var(--border-radius);
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+      z-index: 999;
+    }
+
+    .copied-bubble.show {
+      opacity: 1;
+    }
+
+    .version {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      text-align: center;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="widget">
+    <h1>Content Search Widget</h1>
+    <h2>By SatanLv</h2>
+    <input type="text" id="searchInput" placeholder="Search movie, series or anime..." />
+    <button onclick="searchContent()">Search</button>
+
+    <div class="result-title" id="suggestion"></div>
+    <div class="confirmation-buttons" id="confirmButtons" style="display: none;">
+      <button class="yes" onclick="handleYes()">Yes</button>
+      <button class="no" onclick="handleNo()">No</button>
+    </div>
+
+    <div class="images-grid" id="imagesGrid"></div>
+
+    <div class="copied-bubble" id="copiedBubble">Copied!</div>
+    <div class="version">v1.4.3</div>
+  </div>
+
+  <script>
+    const GOOGLE_API_KEY = "AIzaSyCIOzztenhY4A_knS4Rqa1E31dpAz_qUNw";
+    const GOOGLE_CX = "755902b769ce14965";
+    const OMDB_API_KEY = "aacdb68f";
+
+    let searchText = "";
+    let attempt = 0;
+    let imageResults = [];
+
+    document.getElementById("searchInput").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        searchContent();
+      }
+    });
+
+    async function searchContent() {
+      searchText = document.getElementById("searchInput").value.trim();
+      if (!searchText) return;
+      attempt = 0;
+      document.getElementById("suggestion").innerText = "";
+      document.getElementById("confirmButtons").style.display = "none";
+      document.getElementById("imagesGrid").innerHTML = "";
+      await handleSuggestion();
+    }
+
+    async function handleSuggestion() {
+      const prompt = attempt === 0
+        ? `site:imdb.com OR site:wikipedia.org best match for: ${searchText}`
+        : `find English movie title for: ${searchText}`;
+
+      const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(prompt)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const item = (data.items || []).find(i =>
+        i.link.includes("wikipedia.org") || i.link.includes("imdb.com")
+      );
+
+      if (!item) return showError();
+
+      const cleanTitle = item.title.split(" - ")[0].trim();
+
+      document.getElementById("suggestion").innerText = `Are you searching for: ${cleanTitle}?`;
+      document.getElementById("confirmButtons").style.display = "flex";
+      document.getElementById("confirmButtons").dataset.suggestion = cleanTitle;
+    }
+
+    async function handleYes() {
+      const title = document.getElementById("confirmButtons").dataset.suggestion;
+
+      const res = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${OMDB_API_KEY}`);
+      const data = await res.json();
+      if (!data || data.Response === "False") return showError();
+
+      await navigator.clipboard.writeText(title);
+
+      fetchImages(title);
+    }
+
+    async function handleNo() {
+      attempt++;
+      if (attempt >= 3) return showError();
+      await handleSuggestion();
+    }
+
+    function showError() {
+      document.getElementById("suggestion").innerText = "Not found. Try again.";
+      document.getElementById("confirmButtons").style.display = "none";
+    }
+
+    async function fetchImages(query) {
+      const url = `https://www.googleapis.com/customsearch/v1?searchType=image&imgSize=xxlarge&imgType=photo&num=10&key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query + " movie 1920x1080")}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      imageResults = (data.items || []).filter(item => {
+        const width = item.image?.width || 0;
+        const height = item.image?.height || 0;
+        return width >= height && width >= 1200 && height >= 600;
+      }).slice(0, 5);
+
+      const grid = document.getElementById("imagesGrid");
+      grid.innerHTML = "";
+      imageResults.forEach((img, idx) => {
+        const el = document.createElement("img");
+        el.src = img.link;
+        el.alt = `Image ${idx + 1}`;
+        el.addEventListener("click", () => copyImage(img.link));
+        grid.appendChild(el);
+      });
+
+      if (imageResults[0]) {
+        copyImage(imageResults[0].link);
+      }
+    }
+
+    function copyImage(url) {
+      navigator.clipboard.writeText(url);
+      const bubble = document.getElementById("copiedBubble");
+      bubble.classList.add("show");
+      setTimeout(() => bubble.classList.remove("show"), 1000);
+    }
+  </script>
+</body>
+</html>
