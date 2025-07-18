@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Content Search Widget</title>
+  <style>
+    :root {
+      --bg-color: #2f3437; /* Notion Dark Mode Gray */
+      --widget-bg: #373c3f;
+      --text-color: #e3e6e8;
+      --accent-color: #4caf50;
+      --error-color: #e53935;
+      --border-radius: 0.75rem;
+      --transition: all 0.3s ease-in-out;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .widget {
+      background: var(--widget-bg);
+      border-radius: var(--border-radius);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      padding: 2rem;
+      max-width: 650px;
+      width: 100%;
+    }
+
+    h1, h2 {
+      text-align: center;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+    }
+
+    h2 {
+      font-size: 1rem;
+      color: #ccc;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"] {
+      display: block;
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #555;
+      border-radius: var(--border-radius);
+      margin-bottom: 1rem;
+      font-size: 1rem;
+      background-color: #444;
+      color: white;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      background-color: var(--accent-color);
+      color: white;
+      border-radius: var(--border-radius);
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #388e3c;
+    }
+
+    .result-title, .success-message, .error-message {
+      margin-top: 1rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .success-message {
+      color: var(--accent-color);
+    }
+
+    .error-message {
+      color: var(--error-color);
+    }
+
+    .confirmation-buttons {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .confirmation-buttons button {
+      flex: 1;
+    }
+
+    .image-gallery {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+
+    .image-gallery img {
+      width: 120px;
+      height: auto;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+
+    .image-gallery img:hover {
+      transform: scale(1.05);
+    }
+
+    .version {
+      margin-top: 2rem;
+      text-align: center;
+      color: #888;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="widget">
+    <h1>Content Search Widget</h1>
+    <h2>By SatanLv</h2>
+    <input type="text" id="searchInput" placeholder="Search movie, series or anime..." />
+    <button onclick="searchContent()">Search on the Web</button>
+
+    <div class="result-title" id="suggestion"></div>
+    <div class="confirmation-buttons" id="confirmButtons" style="display: none;">
+      <button class="yes" onclick="handleYes()">Yes</button>
+      <button class="no" onclick="handleNo()">No</button>
+    </div>
+    <div class="success-message" id="successMessage" style="display: none;">
+      Info copied to clipboard!
+    </div>
+    <div class="error-message" id="errorMessage" style="display: none;">
+      Not found. Try another title.
+    </div>
+
+    <div class="image-gallery" id="imageGallery" style="display: none;"></div>
+
+    <div class="version">v1.4.5</div>
+  </div>
+
+  <script>
+    const GOOGLE_API_KEY = "AIzaSyCIOzztenhY4A_knS4Rqa1E31dpAz_qUNw";
+    const GOOGLE_CX = "755902b769ce14965";
+    const OMDB_API_KEY = "aacdb68f";
+
+    let searchText = "";
+    let attempt = 0;
+
+    document.getElementById("searchInput").addEventListener("keypress", function (e) {
+      if (e.key === "Enter") searchContent();
+    });
+
+    async function searchContent() {
+      searchText = document.getElementById("searchInput").value.trim();
+      if (!searchText) return;
+      attempt = 0;
+
+      document.getElementById("successMessage").style.display = "none";
+      document.getElementById("errorMessage").style.display = "none";
+      document.getElementById("imageGallery").style.display = "none";
+      document.getElementById("imageGallery").innerHTML = "";
+
+      await handleSuggestion();
+    }
+
+    async function handleSuggestion() {
+      const prompt = attempt === 0
+        ? `site:imdb.com OR site:wikipedia.org ${searchText}`
+        : `movie title in english for: ${searchText}`;
+
+      const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(prompt)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const rawTitle = data.items?.[0]?.title || "";
+      if (!rawTitle) return showError();
+
+      const title = rawTitle.replace(/ -.*$/, "").trim(); // Clean "Spirited Away - Wikipedia"
+      document.getElementById("suggestion").innerText = `Are you searching for: ${title}?`;
+      document.getElementById("confirmButtons").style.display = "flex";
+      document.getElementById("confirmButtons").dataset.suggestion = title;
+    }
+
+    async function handleYes() {
+      const title = document.getElementById("confirmButtons").dataset.suggestion;
+      const res = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${OMDB_API_KEY}`);
+      const data = await res.json();
+
+      if (!data || data.Response === "False") return showError();
+
+      const info = `**${data.Title}**\n${data.Runtime}, ${data.Genre}\n\n**SINOPSIS**\n${data.Plot}\n\n**INFO**\n🎬 ${data.Director}\n🎭 ${data.Actors}\n🏢 ${data.Production}\n\n**PREMIOS**\n${data.Awards || "N/A"}\n\n**RATING**\n⭐ IMDb: ${data.imdbRating || "N/A"}, 🍅 Rotten: ${data.Ratings?.find(r => r.Source === "Rotten Tomatoes")?.Value || "N/A"}`;
+
+      await navigator.clipboard.writeText(info);
+      document.getElementById("successMessage").style.display = "block";
+
+      fetchImages(title);
+    }
+
+    async function handleNo() {
+      attempt++;
+      if (attempt >= 3) return showError();
+      await handleSuggestion();
+    }
+
+    function showError() {
+      document.getElementById("errorMessage").style.display = "block";
+      document.getElementById("confirmButtons").style.display = "none";
+      document.getElementById("suggestion").innerText = "";
+    }
+
+    async function fetchImages(query) {
+      const url = `https://www.googleapis.com/customsearch/v1?searchType=image&imgSize=xxlarge&num=10&key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query + " movie poster landscape")}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const images = data.items?.filter(item => item.link && item.image?.width >= item.image?.height)?.slice(0, 5);
+      const gallery = document.getElementById("imageGallery");
+
+      if (images.length) {
+        gallery.innerHTML = "";
+        images.forEach((img, i) => {
+          const imageEl = document.createElement("img");
+          imageEl.src = img.link;
+          imageEl.alt = "Image result";
+          imageEl.onclick = () => {
+            navigator.clipboard.writeText(img.link);
+          };
+          gallery.appendChild(imageEl);
+
+          if (i === 0) {
+            navigator.clipboard.writeText(img.link);
+          }
+        });
+        gallery.style.display = "flex";
+      }
+    }
+  </script>
+</body>
+</html>
