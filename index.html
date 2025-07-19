@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Content Search Widget</title>
+  <style>
+    :root {
+      --bg-color: #2e2e2d;
+      --widget-bg: #3b3f42;
+      --text-color: #ffffff;
+      --accent-color: #4caf50;
+      --error-color: #e53935;
+      --border-radius: 0.75rem;
+      --transition: all 0.3s ease-in-out;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .widget {
+      background: var(--widget-bg);
+      border-radius: var(--border-radius);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      padding: 2rem;
+      max-width: 600px;
+      width: 100%;
+      transition: var(--transition);
+    }
+
+    h1, h2 {
+      margin: 0;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+    }
+
+    h2 {
+      font-size: 1rem;
+      color: #bbb;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"] {
+      display: block;
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: var(--border-radius);
+      margin-bottom: 1rem;
+      font-size: 1rem;
+      background-color: #fff;
+      color: #000;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      background-color: var(--accent-color);
+      color: white;
+      border-radius: var(--border-radius);
+      font-size: 1rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    button:hover {
+      background-color: #388e3c;
+    }
+
+    .result-title, .confirmation, .success-message, .error-message {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .confirmation-buttons {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 0.5rem;
+      gap: 1rem;
+    }
+
+    .confirmation-buttons button {
+      flex: 1;
+      font-weight: bold;
+    }
+
+    .yes {
+      background-color: #4caf50;
+    }
+
+    .no {
+      background-color: #e53935;
+    }
+
+    .preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 1.5rem;
+      justify-content: center;
+    }
+
+    .preview-image {
+      width: 30%;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .preview-image:hover {
+      transform: scale(1.05);
+    }
+
+    .version {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      text-align: center;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div class="widget">
+    <h1>Content Search Widget</h1>
+    <h2>By SatanLv</h2>
+    <input type="text" id="searchInput" placeholder="Search movie, series or anime..." />
+    <button onclick="searchContent()">Search on the Web</button>
+
+    <div class="result-title" id="suggestion"></div>
+    <div class="confirmation-buttons" id="confirmButtons" style="display: none;">
+      <button class="yes" onclick="handleYes()">Yes</button>
+      <button class="no" onclick="handleNo()">No</button>
+    </div>
+    <div class="success-message" id="successMessage" style="display: none; color: var(--accent-color);">
+      Title copied to clipboard!
+    </div>
+    <div class="error-message" id="errorMessage" style="display: none; color: var(--error-color);">
+      Content not found, try searching manually...
+    </div>
+
+    <div class="preview-container" id="imageContainer" style="display: none;"></div>
+
+    <div class="version">v1.4.3</div>
+  </div>
+
+  <script>
+    const GOOGLE_API_KEY = "AIzaSyCIOzztenhY4A_knS4Rqa1E31dpAz_qUNw";
+    const GOOGLE_CX = "755902b769ce14965";
+    const OMDB_API_KEY = "aacdb68f";
+
+    let searchText = "";
+    let attempt = 0;
+
+    document.getElementById("searchInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") searchContent();
+    });
+
+    async function searchContent() {
+      searchText = document.getElementById("searchInput").value.trim();
+      if (!searchText) return;
+
+      attempt = 0;
+      document.getElementById("successMessage").style.display = "none";
+      document.getElementById("errorMessage").style.display = "none";
+      document.getElementById("imageContainer").style.display = "none";
+      document.getElementById("imageContainer").innerHTML = "";
+
+      await handleSuggestion();
+    }
+
+    async function handleSuggestion() {
+      const prompt = `(${searchText}) site:imdb.com OR site:en.wikipedia.org -site:reddit.com -site:facebook.com -site:instagram.com -site:x.com -site:twitter.com`;
+      const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(prompt)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      let suggestion = data.items?.[0]?.title || "";
+
+      suggestion = suggestion.split(" - ")[0].split(" | ")[0].trim();
+
+      if (!suggestion) return showError();
+
+      document.getElementById("suggestion").innerText = `Are you searching for: ${suggestion}?`;
+      document.getElementById("confirmButtons").style.display = "flex";
+      document.getElementById("confirmButtons").dataset.suggestion = suggestion;
+    }
+
+    async function handleYes() {
+      const suggestion = document.getElementById("confirmButtons").dataset.suggestion;
+      await navigator.clipboard.writeText(suggestion);
+      document.getElementById("successMessage").style.display = "block";
+      fetchImages(suggestion);
+    }
+
+    async function handleNo() {
+      attempt++;
+      if (attempt >= 3) return showError();
+      await handleSuggestion();
+    }
+
+    function showError() {
+      document.getElementById("errorMessage").style.display = "block";
+      document.getElementById("confirmButtons").style.display = "none";
+      document.getElementById("suggestion").innerText = "";
+    }
+
+    async function fetchImages(query) {
+      const url = `https://www.googleapis.com/customsearch/v1?searchType=image&imgSize=xxlarge&imgType=photo&key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query + " movie poster 1920x1080")}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const images = data.items?.slice(0, 5).map(item => item.link) || [];
+
+      if (images.length) {
+        const container = document.getElementById("imageContainer");
+        container.innerHTML = "";
+        images.forEach((src, index) => {
+          const img = document.createElement("img");
+          img.src = src;
+          img.className = "preview-image";
+          img.alt = "Result image";
+          img.onclick = () => {
+            navigator.clipboard.writeText(src);
+          };
+          container.appendChild(img);
+        });
+        container.style.display = "flex";
+        await navigator.clipboard.writeText(images[0]);
+      }
+    }
+  </script>
+</body>
+</html>
