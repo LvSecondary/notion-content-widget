@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Content Search Widget</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #1a1a1a;
+      color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 500;
+    }
+
+    h2 {
+      margin-top: 4px;
+      font-weight: 300;
+      font-size: 16px;
+      color: #aaa;
+    }
+
+    #searchContainer {
+      margin-top: 20px;
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      background-color: #2a2a2a;
+      color: #f0f0f0;
+      outline: none;
+    }
+
+    button {
+      padding: 10px 16px;
+      background-color: #3c8f6e;
+      border: none;
+      color: white;
+      font-size: 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #50a982;
+    }
+
+    #suggestion, #copyMsg {
+      margin-top: 16px;
+      text-align: center;
+    }
+
+    #resultMsg {
+      margin-top: 30px;
+    }
+
+    .image-row {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .image-row img {
+      width: 200px;
+      height: 112px;
+      object-fit: cover;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+
+    .image-row img:hover {
+      transform: scale(1.05);
+    }
+
+    .movie-option {
+      background-color: #292929;
+      padding: 12px;
+      border-radius: 6px;
+      margin: 10px 0;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .movie-option:hover {
+      background-color: #3a3a3a;
+    }
+
+    #version {
+      margin-top: 40px;
+      color: #666;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Content Search Widget</h1>
+  <h2>By SatanLv</h2>
+
+  <div id="searchContainer">
+    <input type="text" id="searchInput" placeholder="Search for movies, series, anime..."/>
+    <button onclick="startSearch()">Search</button>
+
+    <div id="suggestion"></div>
+    <div id="copyMsg"></div>
+    <div id="resultMsg"></div>
+    <div class="image-row" id="imageResults"></div>
+  </div>
+
+  <div id="version">v1.4.6</div>
+
+  <script>
+    const GOOGLE_API = "AIzaSyCIOzztenhY4A_knS4Rqa1E31dpAz_qUNw";
+    const GOOGLE_CX = "755902b769ce14965";
+    const OMDB_API = "aacdb68f";
+
+    let lastQuery = "";
+    let retryCount = 0;
+
+    document.getElementById("searchInput").addEventListener("keypress", e => {
+      if (e.key === "Enter") startSearch();
+    });
+
+    async function startSearch() {
+      retryCount = 0;
+      const query = document.getElementById("searchInput").value.trim();
+      if (!query) return;
+
+      lastQuery = query;
+      document.getElementById("copyMsg").innerText = "";
+      document.getElementById("resultMsg").innerHTML = "";
+      document.getElementById("suggestion").innerHTML = "";
+      document.getElementById("imageResults").innerHTML = "";
+
+      await fetchTitle(query);
+      await fetchImages(query);
+    }
+
+    async function fetchTitle(query) {
+      const cleanTitle = encodeURIComponent(`what movie in english am I referring to when I write: ${query}`);
+      const response = await fetch(`https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=${cleanTitle}`);
+      const data = await response.json();
+
+      const valid = data.items?.find(item =>
+        (item.link.includes("wikipedia.org") || item.link.includes("imdb.com")) &&
+        !/(reddit|facebook|instagram|x\.com)/i.test(item.link)
+      );
+
+      if (valid) {
+        const title = valid.title.replace(/[-–|].*$/, "").replace(/\(.*?\)/g, "").trim();
+        showSuggestion(title);
+      } else {
+        showError();
+      }
+    }
+
+    function showSuggestion(title) {
+      document.getElementById("suggestion").innerHTML = `
+        <div>Are you searching for: <b>${title}</b>?</div>
+        <button onclick="confirmTitle('${title}')">Yes</button>
+        <button onclick="retryTitle()">No</button>
+      `;
+    }
+
+    function showError() {
+      retryCount++;
+      if (retryCount >= 3) {
+        document.getElementById("suggestion").innerHTML = `<span style="color:red">Content not found, try searching for the title manually...</span>`;
+        return;
+      }
+      fetchTitle(`i am searching for a title in english but I only have this title in another language: ${lastQuery}`);
+    }
+
+    async function fetchImages(query) {
+      const response = await fetch(`https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&searchType=image&imgSize=xxlarge&key=${GOOGLE_API}&cx=${GOOGLE_CX}`);
+      const data = await response.json();
+      const images = data.items?.filter(i => i.image?.width >= 1000 && i.image?.width > i.image?.height).slice(0, 5);
+      const container = document.getElementById("imageResults");
+      container.innerHTML = "";
+
+      if (!images || images.length === 0) return;
+
+      images.forEach((img, index) => {
+        const imageEl = document.createElement("img");
+        imageEl.src = img.link;
+        imageEl.onclick = () => {
+          navigator.clipboard.writeText(img.link);
+          document.getElementById("copyMsg").innerText = "📸 Image link copied to clipboard!";
+        };
+        container.appendChild(imageEl);
+
+        if (index === 0) {
+          navigator.clipboard.writeText(img.link);
+          document.getElementById("copyMsg").innerText = "📸 Image link copied to clipboard!";
+        }
+      });
+    }
+
+    async function confirmTitle(title) {
+      const response = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API}&s=${encodeURIComponent(title)}`);
+      const data = await response.json();
+      if (!data.Search) return;
+
+      const container = document.getElementById("resultMsg");
+      container.innerHTML = "<h3>Select the correct title:</h3>";
+
+      for (const result of data.Search) {
+        const details = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API}&i=${result.imdbID}&plot=full`);
+        const info = await details.json();
+
+        const div = document.createElement("div");
+        div.className = "movie-option";
+        div.innerHTML = `
+          <b>${info.Title}</b> (${info.Year})<br>
+          🎞️ <i>${info.Plot}</i>
+        `;
+        div.onclick = () => {
+          const formatted = `🎬 **${info.Title}**\n⏱️ ${info.Runtime} | ${info.Genre}\n\n**SINOPSIS**\n${info.Plot}\n\n**INFO**\n🎬 Director: ${info.Director}\n👥 Cast: ${info.Actors}\n🏢 Studio: ${info.Production || 'N/A'}\n\n🏆 **PREMIOS**\n${info.Awards || 'N/A'}\n\n📊 **RATINGS**\n⭐ IMDb: ${info.imdbRating}\n🍅 Rotten Tomatoes: ${
+            info.Ratings?.find(r => r.Source === "Rotten Tomatoes")?.Value || "N/A"
+          }`;
+
+          navigator.clipboard.writeText(formatted);
+          document.getElementById("copyMsg").innerText = "✅ Content info successfully copied to clipboard! 😄";
+        };
+        container.appendChild(div);
+      }
+    }
+
+    function retryTitle() {
+      fetchTitle(`i am searching for a title in english but I only have this title in another language: ${lastQuery}`);
+    }
+  </script>
+</body>
+</html>
